@@ -125,9 +125,9 @@ void processRequest() {
         switch (serialRequest) {
           case SEND_0PPB: for (int i =0; i< fH; i++) {
                               fifo_readRow0ppb(rowBuf, rowBuf + serialRequest);
-                             // serialPtr->write(rowBuf, serialRequest);
-                              //serialPtr->write(LF);
-							  serialPtr->print("\n");
+                              serialPtr->write(rowBuf, serialRequest);
+                              serialPtr->write(LF);
+							 // serialPtr->print("\n");
 							  } break;
           case SEND_1PPB: for (int i =0; i< fH; i++) {
                               fifo_readRow1ppb(rowBuf, rowBuf + serialRequest);
@@ -171,8 +171,8 @@ void fifo_readRow0ppb(uint8_t* _rowStart, uint8_t* _rowEnd)
       SET_RCLK_H;
       *_rowStart++ = DATA_PINS;
 	  //Serial.print("Data_pins");
-	  serialPtr->print(DATA_PINS, DEC);
-	  serialPtr->print("\t");
+	 // serialPtr->print(DATA_PINS, DEC);
+	 // serialPtr->print("\t");
 	  //Serial.println(DATA_PINS, HEX);
      // _delayNanoseconds(5);
       SET_RCLK_L;
