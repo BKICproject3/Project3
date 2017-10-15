@@ -1,5 +1,24 @@
+  /**************************************************************
+ *
+ *  Part of the ARDUVISION project
+ *
+ *  by David Sanz Kirbis
+ *
+ *  Receive the image and/or tracking data from a CMOS sensor
+ *  controlled by an Arduino board.
+ *  In the arduino side use the example sketch "ov_fifo_test.ino"
+ *
+ *  More info: http://www.arduvision.com
+ *
+ *
+ *
+ **************************************************************/
+
+
 import processing.serial.*;
 import java.util.*;
+
+
 
 Serial serialPort;     
 
@@ -7,10 +26,8 @@ request_t       request;
 requestStatus_t reqStatus = requestStatus_t.IDLE;
 
 // incoming serial 
-byte [] xX = new byte[G_DEF.F_H*G_DEF.F_W];
 byte[]   ackBuff = new byte[G_DEF.ACK_BUF_LEN];
 byte[][] pix     = new byte[G_DEF.F_H][G_DEF.MAX_ROW_LEN];
-byte [] save_data = new byte[G_DEF.F_H*G_DEF.MAX_ROW_LEN];
 
 double waitTimeout    = 0;
 double fpsTimeStamp   = 0;
@@ -45,27 +62,54 @@ void setup() {
   
   
   // create a font with the third font available to the system:
-  //myFont = createFont("Arial", G_DEF.FONT_SIZE);
-  //textFont(myFont);
+  myFont = createFont("Arial", G_DEF.FONT_SIZE);
+  textFont(myFont);
 
   // List all the available serial serialPorts:
   printArray(Serial.list());
 
   delay(500);
-  serialPort = new Serial(this, "COM5", G_DEF.BAUDRATE);
+  serialPort = new Serial(this, "COM6", G_DEF.BAUDRATE);
   serialPort.bufferUntil(G_DEF.LF);
   serialPort.clear();
   delay(2000);
   reqStatus = reqStatus.IDLE;
-  request = request.STREAM0PPB;
+  request = request.NONE;
 }
   
 // ************************************************************
 //                          DRAW
 // ************************************************************
 void draw() {
-	switch (reqStatus) {
-        case RECEIVED:  reqStatus = requestStatus_t.PROCESSING;
+  switch (request) {
+    case NONE:        reqStatus = requestStatus_t.IDLE;
+                      background(0);
+                      drawInfo();
+                       break;
+    case TRACKDARK: 
+    case TRACKBRIG:    switch (reqStatus) {
+                            case RECEIVED:  drawTracking();
+                                            drawFPS();
+                                            reqStatus = requestStatus_t.IDLE;
+                                            break;
+                            case TIMEOUT:   
+                            case IDLE:      reqTracking(request);
+                                            reqStatus = requestStatus_t.REQUESTED; 
+                                            waitTimeout = G_DEF.SERIAL_TIMEOUT + millis();
+                                            break;
+                            case REQUESTED:  if (millis() > waitTimeout) reqStatus = requestStatus_t.TIMEOUT;
+                                            break;
+                            case ARRIVING:  break;
+                            default : break;
+                       }
+                       drawInfo();
+                       break;
+     case STREAM0PPB:
+     case STREAM1PPB:
+     case STREAM2PPB:
+     case STREAM4PPB:
+     case STREAM8PPB:  switch (reqStatus) {
+                            case RECEIVED:  reqStatus = requestStatus_t.PROCESSING;
                                             buff2pixFrame(pix, currFrame, request);
                                             noSmooth();
                                             image(currFrame,0,0, G_DEF.F_W*G_DEF.DRAW_SCALE,G_DEF.F_H*G_DEF.DRAW_SCALE);
@@ -73,16 +117,20 @@ void draw() {
                                             drawFPS();
                                             reqStatus = requestStatus_t.IDLE;
                                             break;
-        case TIMEOUT:   
-        case IDLE:      reqImage(request);
+                            case TIMEOUT:   
+                            case IDLE:      reqImage(request);
                                             reqStatus = requestStatus_t.REQUESTED; 
                                             waitTimeout = G_DEF.SERIAL_TIMEOUT + millis();
                                             break;
-        case REQUESTED:  if (millis() > waitTimeout) reqStatus = requestStatus_t.TIMEOUT;
+                            case REQUESTED:  if (millis() > waitTimeout) reqStatus = requestStatus_t.TIMEOUT;
                                             break;
-        case ARRIVING:  break;
-        case PROCESSING:  break;
-        default : break;
+                            case ARRIVING:  break;
+                            case PROCESSING:  break;
+                            default : break;
+                          }   
+                      drawInfo();
+                      break;
+      default :        break;
     }                                       
 }
 
@@ -114,16 +162,32 @@ void serialEvent(Serial serialPort) {
 //                       PARSE SERIAL DATA
 // ************************************************************
 void parseSerialData() {
-	serialPort.readBytes(pix[currRow]);
-	serialPort.clear();
-	currRow++;
-	if (currRow >= G_DEF.F_H) {
-		reqStatus = requestStatus_t.RECEIVED; // frame ready on buffer
-		currRow = 0;
-		if (bSerialDebug) println();
-	}
-}      
-
+  switch (request) {
+      case NONE:         break;
+      case TRACKDARK: 
+      case TRACKBRIG:     tmp_x0 = int(serialPort.read());
+                          tmp_y0 = int(serialPort.read());
+                          tmp_x1 = int(serialPort.read());
+                          tmp_y1 = int(serialPort.read());
+                          reqStatus = requestStatus_t.RECEIVED;
+                          break;
+       case STREAM0PPB:
+       case STREAM1PPB:
+       case STREAM2PPB:
+       case STREAM4PPB:
+       case STREAM8PPB:   serialPort.readBytes(pix[currRow]);
+                          serialPort.clear();
+                          currRow++;
+                          if (currRow >= G_DEF.F_H) {
+                              reqStatus = requestStatus_t.RECEIVED; // frame ready on buffer
+                              currRow = 0;
+                              if (bSerialDebug) println();
+                          }
+                        break;
+        default :       break;
+    }      
+    
+}
   
 // ************************************************************
 //                      REQUEST IMAGE
@@ -146,6 +210,25 @@ void reqTracking(request_t req) {
       else if (req == request_t.TRACKBRIG)
           serialPort.write("brig "+Integer.toString(int(thresh))+G_DEF.LF);
        
+}
+  
+// ************************************************************
+//                      DRAW SCREEN INFO
+// ************************************************************
+void drawInfo() {
+  String modeStr = "Press space to toggle MODE: "+request;
+   pushStyle();
+   pushMatrix();
+   noStroke();
+   fill(64);
+   rect(0, height-G_DEF.FONT_BKG_SIZE, width, G_DEF.FONT_BKG_SIZE);
+   fill(255);
+   textAlign(LEFT, TOP);
+   text(modeStr, 20, height-G_DEF.FONT_BKG_SIZE);
+   textAlign(RIGHT, TOP);
+   text("thresh (+/-): "+int(thresh), width-20, height-G_DEF.FONT_BKG_SIZE);
+   popMatrix();
+   popStyle();
 }
 
 // ************************************************************
@@ -178,7 +261,7 @@ void drawTracking() {
    strokeWeight(3);
    
    if (tmp_x1-tmp_x0 > 3 && tmp_x1-tmp_x0 < G_DEF.F_W/2 && tmp_y1-tmp_y0 < G_DEF.F_H/2 && tmp_y1-tmp_y0 > 3) {
-		 stroke(0); 
+      stroke(0);  
          float minX = width-x0*G_DEF.DRAW_SCALE; 
          float minY = y0*G_DEF.DRAW_SCALE;
          float wX = -(x1-x0)*G_DEF.DRAW_SCALE;
@@ -226,23 +309,72 @@ void drawTracking() {
 //              CONVERT PIXEL STREAM BUFFER TO PIMAGE
 // ************************************************************
 void buff2pixFrame(byte[][] pixBuff, PImage dstImg, request_t req) {
-  
+ 
   int Y0 = 0, U = 0, Y1 = 0, V = 0;
   int Y2 = 0, Y3 = 0, Y4 = 0;
   int reqParam = req.getParam();
   
   dstImg.loadPixels();
   
-	for (int y = 0, l = 0, x = 0; y < G_DEF.F_H; y++, x = 0)
-		while (x < reqParam) {
-			Y0 = int(pixBuff[y][x++]); //Cb Y0
-			U = int(pixBuff[y][x++]); //Y0 U - Cb
-			Y1 = int(pixBuff[y][x++]); //Cr Y1
-			V = int(pixBuff[y][x++]); //Y1 V - Cr
-			dstImg.pixels[l++] = YUV2RGB(Y0,U,V);
-			dstImg.pixels[l++] = YUV2RGB(Y1,U,V);
-		}
-    dstImg.updatePixels();  
+  switch (req) {
+     case STREAM0PPB: for (int y = 0, l = 0, x = 0; y < G_DEF.F_H; y++, x = 0)
+                         while (x < reqParam) {
+                            Y0 = int(pixBuff[y][x++]);
+                            U  = int(pixBuff[y][x++]);
+                            Y1 = int(pixBuff[y][x++]);
+                            V  = int(pixBuff[y][x++]);
+                            dstImg.pixels[l++] = YUV2RGB(Y0,U,V);
+                            dstImg.pixels[l++] = YUV2RGB(Y1,U,V);
+                         }
+                      break;
+     case STREAM1PPB: for (int y = 0, l = 0, x = 0; y < G_DEF.F_H; y++, x = 0)
+                         while (x < reqParam) {
+                           Y0 = 0x08 | ((0x0f & int(pixBuff[y][x])) << 4);
+                           U  = 0x00 | ((0xf0 & int(pixBuff[y][x++])));
+                           Y1 = 0x08 | ((0x0f & int(pixBuff[y][x])) << 4);
+                           V  = 0x00 | ((0xf0 & int(pixBuff[y][x++])));
+                           dstImg.pixels[l++] = YUV2RGB(Y0,U,V);
+                           dstImg.pixels[l++] = YUV2RGB(Y1,U,V);
+                         }
+                       break;
+     case STREAM2PPB:  for (int y = 0, l = 0, x = 0; y < G_DEF.F_H; y++, x = 0)
+                         while (x < reqParam) {
+                          Y1 = int(pixBuff[y][x++]);
+                          Y0 = ((Y1 << 4) & 0xF0) | 0x1f;
+                          Y1 = (Y1 & 0xF0)  | 0x1f;
+                          dstImg.pixels[l++] = color(Y0);
+                          dstImg.pixels[l++] = color(Y1);
+                       }
+                       break;
+     case STREAM4PPB:  for (int y = 0, l = 0, x = 0; y < G_DEF.F_H; y++, x = 0)
+                         while (x < reqParam) {
+                          Y3 = int(pixBuff[y][x++]);
+                          Y0 = ((Y3 << 6) & 0xC0) | 0x1f;
+                          Y1 = ((Y3 << 4) & 0xC0) | 0x1f;
+                          Y2 = ((Y3 << 2) & 0xC0) | 0x1f;
+                          Y3 = (Y3 & 0xC0) | 0x1f;
+                          dstImg.pixels[l++] = color(Y0);
+                          dstImg.pixels[l++] = color(Y1);
+                          dstImg.pixels[l++] = color(Y2);
+                          dstImg.pixels[l++] = color(Y3);
+                       }
+                       break;
+     case STREAM8PPB:  for (int y = 0, l = 0, x = 0; y < G_DEF.F_H; y++, x = 0)
+                         while (x < reqParam) {
+                          Y0 = int(pixBuff[y][x++]);
+
+                          dstImg.pixels[l++] = ((Y0 & 0x01) == 0? 0:0xffffff);
+                          dstImg.pixels[l++] = ((Y0 & 0x02) == 0? 0:0xffffff);
+                          dstImg.pixels[l++] = ((Y0 & 0x04) == 0? 0:0xffffff);
+                          dstImg.pixels[l++] = ((Y0 & 0x05) == 0? 0:0xffffff);
+                          dstImg.pixels[l++] = ((Y0 & 0x10) == 0? 0:0xffffff);
+                          dstImg.pixels[l++] = ((Y0 & 0x20) == 0? 0:0xffffff);
+                          dstImg.pixels[l++] = ((Y0 & 0x40) == 0? 0:0xffffff);
+                          dstImg.pixels[l++] = ((Y0 & 0x80) == 0? 0:0xffffff);
+                       }
+                       break;
+  }
+  dstImg.updatePixels();  
 }
   
 // ************************************************************
@@ -254,19 +386,20 @@ color YUV21RGB(int Y, int Cb, int Cr) {
      float R = Y + 1.371*(Cr-128);
      float G = Y - 0.698*(Cr-128)+0.336*(Cb-128);
      float B = Y + 1.732*(Cb-128);
-	
+
      return color(R, G, B);
 }
-
-color YUV2RGB(int Y, int Cb, int Cr) {
+  
+  
+  color YUV2RGB(int Y, int Cb, int Cr) {
      // from OV7670 Software Application note
     int C = Y - 16;
 	int D = Cb - 128;
 	int E = Cr - 128;
 	
-	float R = (298*C+409*E+128)/256;
-	float G = (298*C-100*D-208*E+128)/256;
-	float B = (298*C+516*D+128)/256;
+	float R = (298*C+409*E+128);
+	float G = (298*C-100*D-208*E+128);
+	float B = (298*C+516*D+128);
     return color(R, G, B);
 }
 
@@ -279,7 +412,7 @@ color RGB2YUV(int R, int G, int B) {
     float Yu = 0.299*R+0.587*G+0.114*B;
     float Cb = 0.568*(B-Y)+128;
     float Cr = 0.713*(R-Y)+128;
-	
+
     return color(Yu, Cb, Cr);
 }
 // ************************************************************
@@ -304,6 +437,7 @@ void keyPressed() {
    case 's':  saveFrame(); break; 
    default: break;
   }
+  
 }
 // ************************************************************
 //
