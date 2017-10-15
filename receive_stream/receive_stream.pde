@@ -69,7 +69,7 @@ void setup() {
   printArray(Serial.list());
 
   delay(500);
-  serialPort = new Serial(this, "COM6", G_DEF.BAUDRATE);
+  serialPort = new Serial(this, "COM5", G_DEF.BAUDRATE);
   serialPort.bufferUntil(G_DEF.LF);
   serialPort.clear();
   delay(2000);
