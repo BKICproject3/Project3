@@ -15,7 +15,7 @@ String sData;
 
 String file1 = "E:/ArduinoLog.txt";
 String comPort = "COM5";
-int logDelay = 150; //ms delay
+int logDelay = 160; //ms delay
 
 void setup()
 {

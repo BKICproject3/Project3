@@ -381,7 +381,7 @@ void buff2pixFrame(byte[][] pixBuff, PImage dstImg, request_t req) {
 //                     YUV TO RGB
 // ************************************************************
 
-color YUV21RGB(int Y, int Cb, int Cr) {
+color YUV2RGB(int Y, int Cb, int Cr) {
      // from OV7670 Software Application note
      float R = Y + 1.371*(Cr-128);
      float G = Y - 0.698*(Cr-128)+0.336*(Cb-128);
@@ -391,7 +391,7 @@ color YUV21RGB(int Y, int Cb, int Cr) {
 }
   
   
-  color YUV2RGB(int Y, int Cb, int Cr) {
+  color YUV21RGB(int Y, int Cb, int Cr) {
      // from OV7670 Software Application note
     int C = Y - 16;
 	int D = Cb - 128;
